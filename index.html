@@ -199,7 +199,7 @@
         <!-- Sidebar (desktop) -->
         <aside class="hidden lg:flex w-64 flex-col bg-theme-muted p-4 border-r border-card">
             <div class="flex items-center space-x-3 mb-8">
-                 <img id="sidebar-logo" src="https://i.imgur.com/gC4gA2G.png" alt="Uguwewe Logo" class="h-10 w-10">
+                 <img id="sidebar-logo" src="" alt="Uguwewe Logo" class="h-10 w-10 clan-logo">
                 <h1 class="text-xl font-bold text-theme">Uguwewe</h1>
             </div>
             <nav id="desktop-nav" class="flex flex-col space-y-1">
@@ -490,7 +490,7 @@
             clanMembers: [], // Cache for search
             warInfo: null, // To store current war state globally
             liveWarData: null, // Cache live war data for modal
-            clanBadgeUrl: 'https://i.ibb.co/RTspcR12/image.png', // Fallback logo
+            clanBadgeUrl: 'https://i.imgur.com/gC4gA2G.png', // Fallback logo
         };
 
         // DOM Element references
@@ -731,7 +731,7 @@
                         <h2 class="text-2xl font-bold text-theme mb-4">Siste Krig</h2>
                         <div class="flex items-center justify-between">
                             <div class="text-center">
-                                <img src="${state.clanBadgeUrl}" alt="Uguwewe Badge" class="h-20 w-20 mx-auto rounded-xl mb-2">
+                                <img src="${state.clanBadgeUrl}" alt="Uguwewe Badge" class="h-20 w-20 mx-auto rounded-xl mb-2 clan-logo">
                                 <p class="font-semibold text-theme">Uguwewe</p>
                                 <p class="text-2xl font-bold ${logData.score.winner === 'uguwewe' ? 'text-success' : 'text-theme'}">${logData.score.uguwewewewughoa_stars} ★</p>
                             </div>
@@ -892,7 +892,7 @@
                     <div class="bg-card border border-card rounded-2xl p-6 shadow-theme mb-8">
                         <div class="flex items-center justify-around">
                              <div class="text-center">
-                                <img src="${state.clanBadgeUrl}" alt="Uguwewe Badge" class="h-20 w-20 mx-auto rounded-xl mb-2">
+                                <img src="${state.clanBadgeUrl}" alt="Uguwewe Badge" class="h-20 w-20 mx-auto rounded-xl mb-2 clan-logo">
                                 <p class="text-xl font-semibold text-theme">Uguwewe</p>
                             </div>
                             ${midSectionHtml}
@@ -1313,10 +1313,11 @@
                     const liveCwData = await fetchJson(API_URLS.LIVE_CW);
                     if (liveCwData.war_info && liveCwData.war_info.clanBadge) {
                         state.clanBadgeUrl = liveCwData.war_info.clanBadge;
-                        $('#sidebar-logo').src = state.clanBadgeUrl;
                     }
                 } catch (e) {
                     console.warn("Could not fetch Live CW data on init, using fallback logo.", e);
+                } finally {
+                    document.querySelectorAll('.clan-logo').forEach(img => img.src = state.clanBadgeUrl);
                 }
 
                 const themeData = await fetchJson(API_URLS.THEME);
