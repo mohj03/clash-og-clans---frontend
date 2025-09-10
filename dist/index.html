@@ -1,0 +1,340 @@
+<!--
+  README: Clash of Clans Live Dashboard
+
+  Dette er en enkeltstående, serverløs frontend-applikasjon for å vise sanntidsdata for Clash of Clans.
+  Den er designet for å være 100% statisk og kan hostes gratis på plattformer som Cloudflare Pages, GitHub Pages, eller en enkel Nginx-server.
+
+  **Teknologi-stack:**
+  - HTML5
+  - Tailwind CSS (via CDN) for styling.
+  - Ren JavaScript (ES Modules) for all logikk. Ingen rammeverk, ingen bygg-steg.
+
+  **Deploy-steg:**
+  1. Last opp denne ene filen (`index.html`) til din valgte statiske host-tjeneste.
+  2. ...og det er alt. Applikasjonen er live.
+
+  **Konfigurasjon:**
+  Alle API-endepunkter er hardkodet i <script>-blokken under 'API_URLS'.
+  Eventuelle justeringer kan gjøres direkte i denne filen.
+-->
+<!DOCTYPE html>
+<html lang="no">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Uguwewe - Live Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        /* Inter font-family */
+        body {
+            font-family: 'Inter', sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        /* Tema-variabler - Modern Light Theme (Default) */
+        :root, html {
+            --bg: #f8f9fa;
+            --bg-muted: #ffffff;
+            --card: #ffffff;
+            --card-border: #e9ecef;
+            --fg: #212529;
+            --fg-muted: #6c757d;
+            --accent: #4f46e5;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --shadow: 0 10px 15px -3px rgb(0 0 0 / 0.05), 0 4px 6px -4px rgb(0 0 0 / 0.05);
+        }
+
+        /* Lighter, more modern dark themes */
+        html.theme-clanwar {
+            --bg: #1a2b45; --bg-muted: #203554; --card: #203554; --card-border: #304a6e;
+            --fg: #e6f0ff; --fg-muted: #a8b2d1; --accent: #64ffda;
+        }
+
+        html.theme-clanwarleague {
+            --bg: #3d1b1b; --bg-muted: #4d2a2a; --card: #4d2a2a; --card-border: #6e4040;
+            --fg: #ffecec; --fg-muted: #f2c8c8; --accent: #ff79c6;
+        }
+
+        html.theme-top10 {
+            --bg: #2b230a; --bg-muted: #382e0d; --card: #382e0d; --card-border: #5c4d00;
+            --fg: #fff9db; --fg-muted: #f2eac8; --accent: #f1e05a;
+        }
+
+        html.theme-nowar {
+            --bg: #2c3a4e; --bg-muted: #38465b; --card: #38465b; --card-border: #536175;
+            --fg: #e5e7eb; --fg-muted: #bdc3c9; --accent: #9ca3af;
+        }
+
+        /* Dynamisk fargelegging med CSS-variabler */
+        .bg-theme { background-color: var(--bg); }
+        .bg-theme-muted { background-color: var(--bg-muted); }
+        .bg-card { background-color: var(--card); }
+        .text-theme { color: var(--fg); }
+        .text-theme-muted { color: var(--fg-muted); }
+        .text-accent { color: var(--accent); }
+        .border-card { border-color: var(--card-border); }
+        .shadow-theme { box-shadow: var(--shadow); }
+        
+        body {
+            background-color: var(--bg-muted);
+        }
+        main {
+            background-color: var(--bg);
+        }
+        
+        /* Live Indicator Enhancement */
+        #live-indicator-container.in-war #live-indicator {
+            width: 1rem;
+            height: 1rem;
+            background-color: var(--success);
+        }
+         #live-indicator-container.in-war #live-text {
+            font-size: 1.125rem; /* text-lg */
+            font-weight: 700;
+        }
+
+        /* Animasjoner og effekter */
+        @keyframes pulse { 50% { opacity: 0.6; } }
+        .live-pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+
+        @keyframes shimmer {
+            100% { transform: translateX(100%); }
+        }
+        .skeleton {
+            position: relative;
+            overflow: hidden;
+            background-color: #e9ecef;
+            border-radius: 0.5rem; /* Rounded skeletons */
+        }
+        .skeleton::after {
+            position: absolute;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            left: 0;
+            transform: translateX(-100%);
+            background-image: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+            animation: shimmer 2s infinite;
+            content: '';
+        }
+
+        /* Hamburger-meny overgang */
+        #mobile-menu { transition: transform 0.3s ease-in-out; }
+        .mobile-menu-open { transform: translateX(0); }
+        .mobile-menu-closed { transform: translateX(-100%); }
+        
+        /* Horisontal scroll på små skjermer for tabeller */
+        .table-container { overflow-x: auto; }
+
+        /* Sticky header for tabeller */
+        .table-sticky-header th {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        
+        /* Theme-aware nav link hover */
+        .nav-link:hover {
+            background-color: var(--card-border);
+        }
+        .nav-link.active {
+            background-color: var(--accent);
+            color: white;
+            font-weight: 600;
+        }
+         .nav-link.active:hover {
+            background-color: var(--accent);
+        }
+        
+        /* Modal Styles */
+        #modal-container.hidden {
+            display: none;
+        }
+        .player-card {
+            cursor: pointer;
+        }
+
+    </style>
+     <script>
+        // Anti-flicker script - runs before DOM is built
+        (function() {
+            try {
+                const themeOverride = localStorage.getItem('themeOverride');
+                const themeMap = {
+                    'clanwar': { bg: '#1a2b45', bgMuted: '#203554' },
+                    'clanwarleague': { bg: '#3d1b1b', bgMuted: '#4d2a2a' },
+                    'top10': { bg: '#2b230a', bgMuted: '#382e0d' },
+                    'nowar': { bg: '#2c3a4e', bgMuted: '#38465b' }
+                };
+                if (themeOverride && themeMap[themeOverride]) {
+                    const theme = themeMap[themeOverride];
+                    document.documentElement.classList.add(`theme-${themeOverride}`);
+                    // Force background color immediately
+                    document.documentElement.style.setProperty('--bg', theme.bg);
+                    document.documentElement.style.setProperty('--bg-muted', theme.bgMuted);
+                }
+            } catch (e) { console.error('Anti-flicker script failed', e); }
+        })();
+    </script>
+  <script type="module" crossorigin src="./assets/index-DgqNuavA.js"></script>
+</head>
+
+<body class="bg-theme text-theme transition-colors duration-300">
+    <div id="app-container" class="flex h-screen overflow-hidden">
+        
+        <!-- Mobilmeny (drawer) -->
+        <div id="mobile-menu-overlay" class="fixed inset-0 bg-black bg-opacity-50 z-30 hidden lg:hidden"></div>
+        <aside id="mobile-menu" class="fixed top-0 left-0 h-full w-64 bg-theme-muted z-40 p-4 mobile-menu-closed lg:hidden">
+            <h1 class="text-2xl font-bold text-accent mb-6">Uguwewe</h1>
+            <nav id="mobile-nav" class="flex flex-col space-y-2">
+                <!-- Mobilnavigasjon fylles av JS -->
+            </nav>
+        </aside>
+
+        <!-- Sidebar (desktop) -->
+        <aside class="hidden lg:flex w-64 flex-col bg-theme-muted p-4 border-r border-card">
+            <div class="flex items-center space-x-3 mb-8">
+                 <img id="sidebar-logo" src="https://i.imgur.com/gC4gA2G.png" alt="Uguwewe Logo" class="h-10 w-10">
+                <h1 class="text-xl font-bold text-theme">Uguwewe</h1>
+            </div>
+            <nav id="desktop-nav" class="flex flex-col space-y-1">
+                <!-- Desktopnavigasjon fylles av JS -->
+            </nav>
+        </aside>
+
+        <!-- Hovedinnhold -->
+        <div class="flex-1 flex flex-col overflow-hidden">
+            <header class="flex items-center justify-between p-4 bg-theme-muted border-b border-card shadow-sm z-20">
+                <!-- Hamburger-knapp (mobil) -->
+                <button id="hamburger-btn" class="lg:hidden text-theme-muted focus:outline-none">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-4 6h4"></path></svg>
+                </button>
+                
+                <!-- Søk -->
+                <div class="relative flex-1 max-w-xs">
+                    <input id="search-input" type="text" placeholder="Søk på navn..." class="w-full bg-theme border border-card rounded-lg py-2 pl-10 pr-4 text-theme placeholder-theme-muted focus:ring-2 focus:ring-accent focus:border-accent" autocomplete="off">
+                    <svg class="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-theme-muted" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M10 18a7.952 7.952 0 0 0 4.897-1.688l4.396 4.396 1.414-1.414-4.396-4.396A7.952 7.952 0 0 0 18 10c0-4.411-3.589-8-8-8s-8 3.589-8 8 3.589 8 8 8zm0-14c3.309 0 6 2.691 6 6s-2.691 6-6 6-6-2.691-6-6 2.691-6 6-6z"></path></svg>
+                    <div id="search-suggestions" class="absolute mt-1 w-full bg-card rounded-md shadow-lg z-10 hidden border border-card">
+                        <!-- Søkeforslag fylles av JS -->
+                    </div>
+                </div>
+
+                <!-- Høyre seksjon -->
+                <div class="flex items-center space-x-4">
+                    <div class="text-right hidden sm:block">
+                        <div id="live-indicator-container" class="flex items-center space-x-2 justify-end transition-all duration-300">
+                            <div id="live-indicator" class="w-3 h-3 bg-gray-500 rounded-full transition-all duration-300"></div>
+                            <span id="live-text" class="text-sm font-medium text-accent transition-all duration-300">LIVE</span>
+                        </div>
+                        <p class="text-xs text-theme-muted">Oppdatert: <span id="last-updated"> aldri</span></p>
+                    </div>
+                    <div class="relative">
+                        <button id="theme-button" class="p-2 rounded-full bg-theme hover:bg-gray-100 dark:hover:bg-gray-700 transition-all">
+                            <svg class="w-5 h-5 text-theme" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.25a.75.75 0 0 1 .75.75v18a.75.75 0 0 1-1.5 0v-18A.75.75 0 0 1 12 2.25ZM6 12a.75.75 0 0 1-.75-.75V6.31l-1.72 1.72a.75.75 0 0 1-1.06-1.06l3-3a.75.75 0 0 1 1.06 0l3 3a.75.75 0 1 1-1.06 1.06L6.75 6.31v4.94A.75.75 0 0 1 6 12Zm12 0a.75.75 0 0 1-.75-.75V6.31l-1.72 1.72a.75.75 0 0 1-1.06-1.06l3-3a.75.75 0 0 1 1.06 0l3 3a.75.75 0 0 1-1.06 1.06L18.75 6.31v4.94A.75.75 0 0 1 18 12Z"></path></svg>
+                        </button>
+                        <div id="theme-lock-indicator" class="absolute -top-1 -right-1 hidden">
+                            <svg class="w-4 h-4 text-warning" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M12 1.5a5.25 5.25 0 0 0-5.25 5.25v3a3 3 0 0 0-3 3v6.75a3 3 0 0 0 3 3h10.5a3 3 0 0 0 3-3v-6.75a3 3 0 0 0-3-3v-3c0-2.9-2.35-5.25-5.25-5.25Zm3.75 8.25v-3a3.75 3.75 0 1 0-7.5 0v3h7.5Z" clip-rule="evenodd"></path></svg>
+                        </div>
+                    </div>
+                </div>
+            </header>
+
+            <main id="main-content" class="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 space-y-8 bg-theme">
+                <!-- Views (seksjoner) -->
+                <section id="view-clan" class="view hidden"></section>
+                <section id="view-live" class="view hidden"></section>
+                <section id="view-toplists" class="view hidden"></section>
+                <section id="view-members" class="view hidden"></section>
+                <section id="view-awards" class="view hidden"></section>
+                <section id="view-player" class="view hidden"></section>
+                
+                <!-- Initial loading state -->
+                <div id="initial-loader" class="flex items-center justify-center h-full">
+                    <div class="text-center">
+                        <svg class="animate-spin h-10 w-10 text-accent mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <p class="mt-4 text-lg font-medium text-theme-muted">Henter sanntidsdata...</p>
+                    </div>
+                </div>
+
+            </main>
+        </div>
+    </div>
+    
+    <!-- Modal for Attack Details -->
+    <div id="modal-container" class="hidden fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-4">
+        <div id="attack-modal" class="bg-card rounded-2xl shadow-xl w-full max-w-lg max-h-[80vh] flex flex-col">
+            <header class="flex items-center justify-between p-4 border-b border-card">
+                <h2 id="modal-title" class="text-xl font-bold text-theme">Angrepsdetaljer</h2>
+                <button id="modal-close-btn" class="text-theme-muted hover:text-theme">&times;</button>
+            </header>
+            <div id="modal-content" class="p-6 overflow-y-auto space-y-4">
+                <!-- Attack details will be injected here -->
+            </div>
+        </div>
+    </div>
+
+
+    <!-- TEMPLATES for kloning -->
+
+    <template id="table-skeleton-template">
+        <div class="bg-card border border-card rounded-2xl p-4">
+            <div class="h-8 w-1/3 skeleton mb-6"></div>
+            <div class="space-y-3">
+                <div class="grid grid-cols-4 gap-4">
+                    <div class="h-5 skeleton col-span-1"></div>
+                    <div class="h-5 skeleton col-span-1"></div>
+                    <div class="h-5 skeleton col-span-1"></div>
+                    <div class="h-5 skeleton col-span-1"></div>
+                </div>
+                <div class="space-y-2">
+                    <div class="h-8 skeleton"></div>
+                    <div class="h-8 skeleton"></div>
+                    <div class="h-8 skeleton"></div>
+                    <div class="h-8 skeleton"></div>
+                    <div class="h-8 skeleton"></div>
+                </div>
+            </div>
+        </div>
+    </template>
+    
+    <template id="generic-card-template">
+        <div class="bg-card border border-card rounded-2xl p-6 shadow-theme">
+            <h2 class="text-2xl font-bold text-accent mb-1"></h2>
+            <h3 class="text-lg font-semibold text-theme mb-2"></h3>
+            <p class="text-theme-muted mb-4"></p>
+            <p class="text-xs text-theme-muted italic"></p>
+        </div>
+    </template>
+    
+    <template id="player-profile-skeleton-template">
+       <div class="space-y-8">
+            <div class="bg-card border border-card rounded-2xl p-6 text-center space-y-2">
+                <div class="h-10 w-1/2 mx-auto skeleton"></div>
+                <div class="h-6 w-1/4 mx-auto skeleton"></div>
+            </div>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div class="h-20 skeleton bg-card border border-card rounded-2xl"></div>
+                <div class="h-20 skeleton bg-card border border-card rounded-2xl"></div>
+                <div class="h-20 skeleton bg-card border border-card rounded-2xl"></div>
+                <div class="h-20 skeleton bg-card border border-card rounded-2xl"></div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="h-24 skeleton bg-card border border-card rounded-2xl"></div>
+                <div class="h-24 skeleton bg-card border border-card rounded-2xl"></div>
+            </div>
+        </div>
+    </template>
+
+
+</body>
+</html>
+
