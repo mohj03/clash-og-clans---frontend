@@ -1,0 +1,1452 @@
+<!--
+  README: Clash of Clans Live Dashboard
+
+  Dette er en enkeltstående, serverløs frontend-applikasjon for å vise sanntidsdata for Clash of Clans.
+  Den er designet for å være 100% statisk og kan hostes gratis på plattformer som Cloudflare Pages, GitHub Pages, eller en enkel Nginx-server.
+
+  **Teknologi-stack:**
+  - HTML5
+  - Tailwind CSS (via CDN) for styling.
+  - Ren JavaScript (ES Modules) for all logikk. Ingen rammeverk, ingen bygg-steg.
+
+  **Deploy-steg:**
+  1. Last opp denne ene filen (`index.html`) til din valgte statiske host-tjeneste.
+  2. ...og det er alt. Applikasjonen er live.
+
+  **Konfigurasjon:**
+  Alle API-endepunkter er hardkodet i <script>-blokken under 'API_URLS'.
+  Eventuelle justeringer kan gjøres direkte i denne filen.
+-->
+<!DOCTYPE html>
+<html lang="no">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Uguwewe - Live Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        /* Inter font-family */
+        body {
+            font-family: 'Inter', sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        /* Tema-variabler - Modern Light Theme (Default) */
+        :root, html {
+            --bg: #f8f9fa;
+            --bg-muted: #ffffff;
+            --card: #ffffff;
+            --card-border: #e9ecef;
+            --fg: #212529;
+            --fg-muted: #6c757d;
+            --accent: #4f46e5;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --shadow: 0 10px 15px -3px rgb(0 0 0 / 0.05), 0 4px 6px -4px rgb(0 0 0 / 0.05);
+        }
+
+        /* Lighter, more modern dark themes */
+        html.theme-clanwar {
+            --bg: #1a2b45; --bg-muted: #203554; --card: #203554; --card-border: #304a6e;
+            --fg: #e6f0ff; --fg-muted: #a8b2d1; --accent: #64ffda;
+        }
+
+        html.theme-clanwarleague {
+            --bg: #3d1b1b; --bg-muted: #4d2a2a; --card: #4d2a2a; --card-border: #6e4040;
+            --fg: #ffecec; --fg-muted: #f2c8c8; --accent: #ff79c6;
+        }
+
+        html.theme-top10 {
+            --bg: #2b230a; --bg-muted: #382e0d; --card: #382e0d; --card-border: #5c4d00;
+            --fg: #fff9db; --fg-muted: #f2eac8; --accent: #f1e05a;
+        }
+
+        html.theme-nowar {
+            --bg: #2c3a4e; --bg-muted: #38465b; --card: #38465b; --card-border: #536175;
+            --fg: #e5e7eb; --fg-muted: #bdc3c9; --accent: #9ca3af;
+        }
+
+        /* Dynamisk fargelegging med CSS-variabler */
+        .bg-theme { background-color: var(--bg); }
+        .bg-theme-muted { background-color: var(--bg-muted); }
+        .bg-card { background-color: var(--card); }
+        .text-theme { color: var(--fg); }
+        .text-theme-muted { color: var(--fg-muted); }
+        .text-accent { color: var(--accent); }
+        .border-card { border-color: var(--card-border); }
+        .shadow-theme { box-shadow: var(--shadow); }
+        
+        body {
+            background-color: var(--bg-muted);
+        }
+        main {
+            background-color: var(--bg);
+        }
+        
+        /* Live Indicator Enhancement */
+        #live-indicator-container.in-war #live-indicator {
+            width: 1rem;
+            height: 1rem;
+            background-color: var(--success);
+        }
+         #live-indicator-container.in-war #live-text {
+            font-size: 1.125rem; /* text-lg */
+            font-weight: 700;
+        }
+
+        /* Animasjoner og effekter */
+        @keyframes pulse { 50% { opacity: 0.6; } }
+        .live-pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+
+        @keyframes shimmer {
+            100% { transform: translateX(100%); }
+        }
+        .skeleton {
+            position: relative;
+            overflow: hidden;
+            background-color: #e9ecef;
+            border-radius: 0.5rem; /* Rounded skeletons */
+        }
+        .skeleton::after {
+            position: absolute;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            left: 0;
+            transform: translateX(-100%);
+            background-image: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+            animation: shimmer 2s infinite;
+            content: '';
+        }
+
+        /* Hamburger-meny overgang */
+        #mobile-menu { transition: transform 0.3s ease-in-out; }
+        .mobile-menu-open { transform: translateX(0); }
+        .mobile-menu-closed { transform: translateX(-100%); }
+        
+        /* Horisontal scroll på små skjermer for tabeller */
+        .table-container { overflow-x: auto; }
+
+        /* Sticky header for tabeller */
+        .table-sticky-header th {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        
+        /* Theme-aware nav link hover */
+        .nav-link:hover {
+            background-color: var(--card-border);
+        }
+        .nav-link.active {
+            background-color: var(--accent);
+            color: white;
+            font-weight: 600;
+        }
+         .nav-link.active:hover {
+            background-color: var(--accent);
+        }
+        
+        /* Modal Styles */
+        #modal-container.hidden {
+            display: none;
+        }
+        .player-card {
+            cursor: pointer;
+        }
+
+    </style>
+     <script>
+        // Anti-flicker script - runs before DOM is built
+        (function() {
+            try {
+                const themeOverride = localStorage.getItem('themeOverride');
+                const themeMap = {
+                    'clanwar': { bg: '#1a2b45', bgMuted: '#203554' },
+                    'clanwarleague': { bg: '#3d1b1b', bgMuted: '#4d2a2a' },
+                    'top10': { bg: '#2b230a', bgMuted: '#382e0d' },
+                    'nowar': { bg: '#2c3a4e', bgMuted: '#38465b' }
+                };
+                if (themeOverride && themeMap[themeOverride]) {
+                    const theme = themeMap[themeOverride];
+                    document.documentElement.classList.add(`theme-${themeOverride}`);
+                    // Force background color immediately
+                    document.documentElement.style.setProperty('--bg', theme.bg);
+                    document.documentElement.style.setProperty('--bg-muted', theme.bgMuted);
+                }
+            } catch (e) { console.error('Anti-flicker script failed', e); }
+        })();
+    </script>
+</head>
+
+<body class="bg-theme text-theme transition-colors duration-300">
+    <div id="app-container" class="flex h-screen overflow-hidden">
+        
+        <!-- Mobilmeny (drawer) -->
+        <div id="mobile-menu-overlay" class="fixed inset-0 bg-black bg-opacity-50 z-30 hidden lg:hidden"></div>
+        <aside id="mobile-menu" class="fixed top-0 left-0 h-full w-64 bg-theme-muted z-40 p-4 mobile-menu-closed lg:hidden">
+            <h1 class="text-2xl font-bold text-accent mb-6">Uguwewe</h1>
+            <nav id="mobile-nav" class="flex flex-col space-y-2">
+                <!-- Mobilnavigasjon fylles av JS -->
+            </nav>
+        </aside>
+
+        <!-- Sidebar (desktop) -->
+        <aside class="hidden lg:flex w-64 flex-col bg-theme-muted p-4 border-r border-card">
+            <div class="flex items-center space-x-3 mb-8">
+                 <img id="sidebar-logo" src="https://i.ibb.co/RTspcR12/image.png" alt="Uguwewe Logo" class="h-10 w-10">
+                <h1 class="text-xl font-bold text-theme">Uguwewe</h1>
+            </div>
+            <nav id="desktop-nav" class="flex flex-col space-y-1">
+                <!-- Desktopnavigasjon fylles av JS -->
+            </nav>
+        </aside>
+
+        <!-- Hovedinnhold -->
+        <div class="flex-1 flex flex-col overflow-hidden">
+            <header class="flex items-center justify-between p-4 bg-theme-muted border-b border-card shadow-sm z-20">
+                <!-- Hamburger-knapp (mobil) -->
+                <button id="hamburger-btn" class="lg:hidden text-theme-muted focus:outline-none">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-4 6h4"></path></svg>
+                </button>
+                
+                <!-- Søk -->
+                <div class="relative flex-1 max-w-xs">
+                    <input id="search-input" type="text" placeholder="Søk på navn..." class="w-full bg-theme border border-card rounded-lg py-2 pl-10 pr-4 text-theme placeholder-theme-muted focus:ring-2 focus:ring-accent focus:border-accent" autocomplete="off">
+                    <svg class="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-theme-muted" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M10 18a7.952 7.952 0 0 0 4.897-1.688l4.396 4.396 1.414-1.414-4.396-4.396A7.952 7.952 0 0 0 18 10c0-4.411-3.589-8-8-8s-8 3.589-8 8 3.589 8 8 8zm0-14c3.309 0 6 2.691 6 6s-2.691 6-6 6-6-2.691-6-6 2.691-6 6-6z"></path></svg>
+                    <div id="search-suggestions" class="absolute mt-1 w-full bg-card rounded-md shadow-lg z-10 hidden border border-card">
+                        <!-- Søkeforslag fylles av JS -->
+                    </div>
+                </div>
+
+                <!-- Høyre seksjon -->
+                <div class="flex items-center space-x-4">
+                    <div class="text-right hidden sm:block">
+                        <div id="live-indicator-container" class="flex items-center space-x-2 justify-end transition-all duration-300">
+                            <div id="live-indicator" class="w-3 h-3 bg-gray-500 rounded-full transition-all duration-300"></div>
+                            <span id="live-text" class="text-sm font-medium text-accent transition-all duration-300">LIVE</span>
+                        </div>
+                        <p class="text-xs text-theme-muted">Oppdatert: <span id="last-updated"> aldri</span></p>
+                    </div>
+                    <div class="relative">
+                        <button id="theme-button" class="p-2 rounded-full bg-theme hover:bg-gray-100 dark:hover:bg-gray-700 transition-all">
+                            <svg class="w-5 h-5 text-theme" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.25a.75.75 0 0 1 .75.75v18a.75.75 0 0 1-1.5 0v-18A.75.75 0 0 1 12 2.25ZM6 12a.75.75 0 0 1-.75-.75V6.31l-1.72 1.72a.75.75 0 0 1-1.06-1.06l3-3a.75.75 0 0 1 1.06 0l3 3a.75.75 0 1 1-1.06 1.06L6.75 6.31v4.94A.75.75 0 0 1 6 12Zm12 0a.75.75 0 0 1-.75-.75V6.31l-1.72 1.72a.75.75 0 0 1-1.06-1.06l3-3a.75.75 0 0 1 1.06 0l3 3a.75.75 0 0 1-1.06 1.06L18.75 6.31v4.94A.75.75 0 0 1 18 12Z"></path></svg>
+                        </button>
+                        <div id="theme-lock-indicator" class="absolute -top-1 -right-1 hidden">
+                            <svg class="w-4 h-4 text-warning" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M12 1.5a5.25 5.25 0 0 0-5.25 5.25v3a3 3 0 0 0-3 3v6.75a3 3 0 0 0 3 3h10.5a3 3 0 0 0 3-3v-6.75a3 3 0 0 0-3-3v-3c0-2.9-2.35-5.25-5.25-5.25Zm3.75 8.25v-3a3.75 3.75 0 1 0-7.5 0v3h7.5Z" clip-rule="evenodd"></path></svg>
+                        </div>
+                    </div>
+                </div>
+            </header>
+
+            <main id="main-content" class="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 space-y-8 bg-theme">
+                <!-- Views (seksjoner) -->
+                <section id="view-clan" class="view hidden"></section>
+                <section id="view-live" class="view hidden"></section>
+                <section id="view-toplists" class="view hidden"></section>
+                <section id="view-members" class="view hidden"></section>
+                <section id="view-awards" class="view hidden"></section>
+                <section id="view-player" class="view hidden"></section>
+                
+                <!-- Initial loading state -->
+                <div id="initial-loader" class="flex items-center justify-center h-full">
+                    <div class="text-center">
+                        <svg class="animate-spin h-10 w-10 text-accent mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <p class="mt-4 text-lg font-medium text-theme-muted">Henter sanntidsdata...</p>
+                    </div>
+                </div>
+
+            </main>
+        </div>
+    </div>
+    
+    <!-- Modal for Attack Details -->
+    <div id="modal-container" class="hidden fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-4">
+        <div id="attack-modal" class="bg-card rounded-2xl shadow-xl w-full max-w-lg max-h-[80vh] flex flex-col">
+            <header class="flex items-center justify-between p-4 border-b border-card">
+                <h2 id="modal-title" class="text-xl font-bold text-theme">Angrepsdetaljer</h2>
+                <button id="modal-close-btn" class="text-theme-muted hover:text-theme">&times;</button>
+            </header>
+            <div id="modal-content" class="p-6 overflow-y-auto space-y-4">
+                <!-- Attack details will be injected here -->
+            </div>
+        </div>
+    </div>
+
+
+    <!-- TEMPLATES for kloning -->
+
+    <template id="table-skeleton-template">
+        <div class="bg-card border border-card rounded-2xl p-4">
+            <div class="h-8 w-1/3 skeleton mb-6"></div>
+            <div class="space-y-3">
+                <div class="grid grid-cols-4 gap-4">
+                    <div class="h-5 skeleton col-span-1"></div>
+                    <div class="h-5 skeleton col-span-1"></div>
+                    <div class="h-5 skeleton col-span-1"></div>
+                    <div class="h-5 skeleton col-span-1"></div>
+                </div>
+                <div class="space-y-2">
+                    <div class="h-8 skeleton"></div>
+                    <div class="h-8 skeleton"></div>
+                    <div class="h-8 skeleton"></div>
+                    <div class="h-8 skeleton"></div>
+                    <div class="h-8 skeleton"></div>
+                </div>
+            </div>
+        </div>
+    </template>
+    
+    <template id="generic-card-template">
+        <div class="bg-card border border-card rounded-2xl p-6 shadow-theme">
+            <h2 class="text-2xl font-bold text-accent mb-1"></h2>
+            <h3 class="text-lg font-semibold text-theme mb-2"></h3>
+            <p class="text-theme-muted mb-4"></p>
+            <p class="text-xs text-theme-muted italic"></p>
+        </div>
+    </template>
+    
+    <template id="player-profile-skeleton-template">
+       <div class="space-y-8">
+            <div class="bg-card border border-card rounded-2xl p-6 text-center space-y-2">
+                <div class="h-10 w-1/2 mx-auto skeleton"></div>
+                <div class="h-6 w-1/4 mx-auto skeleton"></div>
+            </div>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div class="h-20 skeleton bg-card border border-card rounded-2xl"></div>
+                <div class="h-20 skeleton bg-card border border-card rounded-2xl"></div>
+                <div class="h-20 skeleton bg-card border border-card rounded-2xl"></div>
+                <div class="h-20 skeleton bg-card border border-card rounded-2xl"></div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="h-24 skeleton bg-card border border-card rounded-2xl"></div>
+                <div class="h-24 skeleton bg-card border border-card rounded-2xl"></div>
+            </div>
+        </div>
+    </template>
+
+
+    <script type="module">
+        // JSDoc Type Definitions for API responses
+        /**
+         * @typedef {Object} ThemeResponse
+         * @property {'clanwarleague' | 'clanwar' | 'top10' | 'noWar'} theme
+         * @property {WarInfo} [warInfo]
+         */
+        /**
+         * @typedef {Object} WarInfo
+         * @property {string} endTime
+         * @property {'cw' | 'cwl'} warType
+         * @property {string} preparationStartTime
+         * @property {string} startTime
+         * @property {'preparation' | 'inWar' | 'warEnded'} state
+         * @property {string} oppName
+         * @property {number} warAttended
+         * @property {string} oppBadge
+         * @property {string} [clanBadge]
+         */
+        /**
+         * @typedef {Object.<string, PlayerWarStats>} LiveCwResponse
+         * @property {WarInfo & {teamSize: number}} war_info
+         */
+        /**
+         * @typedef {Object} PlayerWarStats
+         * @property {string} name
+         * @property {number} townhallLevel
+         * @property {number} attacksUsed
+         * @property {number} totalStars
+         * @property {number} totalDestruction
+         * @property {Attack[]} attacks
+         * @property {{points: number, potentialBonus?: number}} score
+         */
+         /**
+         * @typedef {Object} Attack
+         * @property {string} defenderTag
+         * @property {string} defenderName
+         * @property {number} defenderTownhall
+         * @property {number} stars
+         * @property {number} destructionPercentage
+         * @property {number} duration
+         */
+        /**
+         * @typedef {Object.<string, ClanMember>} ClanMembersResponse
+         */
+        /**
+         * @typedef {Object} ClanMember
+         * @property {string} name
+         * @property {number} rating
+         * @property {number} townhall
+         * @property {string} role
+         * @property {number} trophies
+         * @property {string} icon_url
+         * @property {number} sum_stars
+         */
+        /**
+         * @typedef {Object.<string, PlayerProfile>} PlayerProfileResponse
+         */
+         /**
+         * @typedef {Object} PlayerProfile
+         * @property {string | null} name
+         * @property {number | null} townhall
+         * @property {number | string} sum_stars
+         * @property {number | string} avrg_stars
+         * @property {number | string} avrg_attacks_used
+         * @property {number | string} sum_attacks_used
+         * @property {number | string} sum_points
+         * @property {number | string} wars_attended
+         * @property {number | null} player_rating
+         */
+        /**
+         * @typedef {Object.<string, LiveMonthlyPlayer>} LiveMonthlyResponse
+         */
+        /**
+         * @typedef {Object} LiveMonthlyPlayer
+         * @property {string} name
+         * @property {number} monthly_points
+         * @property {number} monthly_bonus
+         * @property {number} final_monthly_points
+         * @property {number | string} precent
+         * @property {number} monthly_possible_bonus
+         * @property {number} monthly_max_points
+         * @property {number} monthly_attacks_used
+         * @property {number} monthly_possible_wars
+         * @property {number} monthly_possible_attacks
+         * @property {number} monthly_stars
+         * @property {number} rating
+         * @property {number} rank
+         */
+        /**
+         * @typedef {Object} AwardResponse
+         * @property {string} name
+         * @property {string} headline
+         * @property {string} comment
+         * @property {string} info
+         */
+        /**
+         * @typedef {Object.<string, Top10Player>} Top10Response
+         */
+        /**
+         * @typedef {Object} Top10Player
+         * @property {string} name
+         * @property {number} points
+         * @property {number} stars
+         * @property {number} rating
+         * @property {number} rank
+         * @property {string} comment
+         */
+        /**
+         * @typedef {Object} LogCwlResponse
+         * @property {Object} opponent
+         * @property {string} opponent.name
+         * @property {string} opponent.endTime
+         * @property {string} opponent.tag
+         * @property {string} opponent.badge_url
+         * @property {Object} score
+         * @property {string} score.winner
+         * @property {number} score.uguwewewewughoa_stars
+         * @property {number} score.opp_stars
+         */
+
+        // --- KONFIGURASJON & GLOBALE VARIABLER ---
+        
+        const API_BASE = "http://79.76.40.113:8000/clash";
+        const API_URLS = {
+            THEME: `${API_BASE}/theme`,
+            LIVE_CW: `${API_BASE}/live-cw`,
+            CLAN_MEMBERS: `${API_BASE}/clan-members`,
+            PLAYER_BASE: `${API_BASE}/player/`,
+            LIVE_MONTHLY: `${API_BASE}/live-monthly`,
+            MVP: `${API_BASE}/mvp`,
+            ROMPIS: `${API_BASE}/rompis`,
+            TOP10: `${API_BASE}/top10-month`,
+            LOG_CW: `${API_BASE}/log-cwl`,
+        };
+
+        const THEMES = ['clanwar', 'clanwarleague', 'top10', 'nowar'];
+
+        const NAV_ITEMS = [
+            { id: 'clan', name: 'Klanside', icon: '<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-3" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25ZM9.602 16.79v-2.115a.75.75 0 0 1 .33-.625l1.5-1.071a.75.75 0 0 1 .838 0l1.5 1.07a.75.75 0 0 1 .33.626v2.114a.75.75 0 0 1-1.168.625l-1.002-.715a.75.75 0 0 0-.836 0l-1.002.715A.75.75 0 0 1 9.602 16.79Zm8.148-7.399a.75.75 0 0 1-1.06-1.06l-1.22-1.22a.75.75 0 0 1 0-1.06l1.22-1.22a.75.75 0 1 1 1.06 1.06l-1.22 1.22a.75.75 0 0 1 0 1.06l1.22 1.22a.75.75 0 0 1 0 1.06ZM6.25 9.391a.75.75 0 1 1 0-1.06l1.22-1.22a.75.75 0 0 1 1.06 0l1.22 1.22a.75.75 0 1 1-1.06 1.06l-1.22-1.22a.75.75 0 0 1 0-1.06l1.22-1.22a.75.75 0 1 1 1.06 1.06l-1.22 1.22a.75.75 0 0 1-1.06 0l-1.22-1.22Z"></path></svg>' },
+            { id: 'live', name: 'Live Krig', icon: '<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-3" viewBox="0 0 24 24" fill="currentColor"><path d="M12.96 6.34a.75.75 0 0 1-1.06 0l-1.12-1.12a.75.75 0 0 1 1.06-1.06l1.12 1.12a.75.75 0 0 1 0 1.06ZM12 17.25a.75.75 0 0 1-.75-.75V8.25a.75.75 0 0 1 1.5 0v8.25a.75.75 0 0 1-.75.75Z M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm0-1.5a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15Z"></path></svg>' },
+            { id: 'toplists', name: 'Topplister', icon: '<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-3" viewBox="0 0 24 24" fill="currentColor"><path d="M17.25 3.75a.75.75 0 0 0-1.5 0v1.5h-3v-1.5a.75.75 0 0 0-1.5 0v1.5H8.25v-1.5a.75.75 0 0 0-1.5 0v1.5H5.25a3 3 0 0 0-3 3v10.5a3 3 0 0 0 3 3h13.5a3 3 0 0 0 3-3V8.25a3 3 0 0 0-3-3H17.25v-1.5Z M4.5 9.75h15V18a1.5 1.5 0 0 1-1.5 1.5H6A1.5 1.5 0 0 1 4.5 18v-8.25Z"></path></svg>' },
+            { id: 'members', name: 'Klanmedlemmer', icon: '<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-3" viewBox="0 0 24 24" fill="currentColor"><path d="M4.5 6.375a4.125 4.125 0 1 1 8.25 0 4.125 4.125 0 0 1-8.25 0ZM14.25 8.625a3.375 3.375 0 1 1 6.75 0 3.375 3.375 0 0 1-6.75 0ZM1.5 19.125a7.125 7.125 0 0 1 14.25 0v.003l-.001.119a.75.75 0 0 1-.363.63l-6.75 3.5a.75.75 0 0 1-.671 0l-6.75-3.5a.75.75 0 0 1-.363-.63l-.001-.12v-.003ZM12.375 21.433 18.75 18v.003l.001.119a.75.75 0 0 1-.363.63l-6.75 3.5a.75.75 0 0 1-.671 0l-.222-.115a25.352 25.352 0 0 1-3.235-1.558.75.75 0 0 1-.22-.672v-1.127a.75.75 0 0 1 .432-.673l.01-.005.01-.005 6.75-3.5a.75.75 0 0 1 .671 0l6.75 3.5a.75.75 0 0 1 .363.63l.001.12v1.875a.75.75 0 0 1-.75.75h-2.25a.75.75 0 0 1 0-1.5h1.5v-1.125l-6-3.125-6 3.125v1.125h1.5a.75.75 0 0 1 0 1.5h-2.25a.75.75 0 0 1-.75-.75v-1.875a.75.75 0 0 1 .363-.63l6.75-3.5a.75.75 0 0 1 .671 0Z"></path></svg>' },
+            { id: 'awards', name: 'Kåringer', icon: '<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-3" viewBox="0 0 24 24" fill="currentColor"><path d="M15.75 1.5a.75.75 0 0 1 .75.75v4.5a.75.75 0 0 1-1.5 0V3.344l-2.232 2.232a.75.75 0 0 1-1.06 0L9.476 3.344v2.906a.75.75 0 0 1-1.5 0v-4.5a.75.75 0 0 1 .75-.75h7.5Zm-7.5 6h7.5a.75.75 0 0 1 0 1.5h-7.5a.75.75 0 0 1 0-1.5ZM3 13.5a.75.75 0 0 1 .75-.75h16.5a.75.75 0 0 1 0 1.5H3.75a.75.75 0 0 1-.75-.75ZM3 17.25a.75.75 0 0 1 .75-.75h16.5a.75.75 0 0 1 0 1.5H3.75a.75.75 0 0 1-.75-.75ZM2.25 21a.75.75 0 0 1 .75-.75h18a.75.75 0 0 1 0 1.5H3a.75.75 0 0 1-.75-.75Z"></path></svg>' }
+        ];
+
+        // Global state object
+        const state = {
+            currentView: null,
+            timers: {},
+            lastUpdated: null,
+            themeLockUntil: null,
+            currentTheme: 'light', // Start with new light theme
+            clanMembers: [], // Cache for search
+            warInfo: null, // To store current war state globally
+            liveWarData: null, // Cache live war data for modal
+            clanBadgeUrl: 'https://i.ibb.co/RTspcR12/image.png', // Fallback logo
+        };
+
+        // DOM Element references
+        const $ = (selector) => document.querySelector(selector);
+        const $$ = (selector) => document.querySelectorAll(selector);
+
+        // --- HJELPEFUNKSJONER (UTILS) ---
+
+        const timeUtils = {
+            /**
+             * Parses a non-standard ISO string (YYYYMMDDTHHMMSS.sssZ) into a standard one.
+             * @param {string} nonStandardIso - The input string.
+             * @returns {string|null} - A standard ISO string or null if invalid.
+             */
+            parseNonStandardISO: (nonStandardIso) => {
+                if (!nonStandardIso || typeof nonStandardIso !== 'string' || nonStandardIso.length < 15) {
+                    return null;
+                }
+                try {
+                    const year = nonStandardIso.substring(0, 4);
+                    const month = nonStandardIso.substring(4, 6);
+                    const day = nonStandardIso.substring(6, 8);
+                    const hour = nonStandardIso.substring(9, 11);
+                    const minute = nonStandardIso.substring(11, 13);
+                    const second = nonStandardIso.substring(13, 15);
+                    return `${year}-${month}-${day}T${hour}:${minute}:${second}.000Z`;
+                } catch (e) {
+                    console.error("Failed to parse date string:", nonStandardIso, e);
+                    return null;
+                }
+            },
+            formatOslo: (isoString) => {
+                const standardIso = timeUtils.parseNonStandardISO(isoString) || isoString;
+                const date = new Date(standardIso);
+
+                if (isNaN(date.getTime())) {
+                    return 'Ugyldig dato';
+                }
+                
+                try {
+                    return new Intl.DateTimeFormat('nb-NO', {
+                        dateStyle: 'medium',
+                        timeStyle: 'short',
+                        timeZone: 'Europe/Oslo'
+                    }).format(date);
+                } catch (e) {
+                    console.warn("Could not format date:", isoString, e);
+                    return 'Ugyldig dato';
+                }
+            },
+            countdown: (targetIsoString, timerElement, onEnd) => {
+                const standardIso = timeUtils.parseNonStandardISO(targetIsoString) || targetIsoString;
+                const targetTime = new Date(standardIso).getTime();
+
+                if (isNaN(targetTime)) {
+                    console.warn("Invalid target time for countdown:", targetIsoString);
+                    if (onEnd) onEnd();
+                    return null;
+                }
+
+                const update = () => {
+                    const now = new Date().getTime();
+                    const distance = targetTime - now;
+
+                    if (distance <= 0) {
+                        clearInterval(timerId);
+                        if (onEnd) onEnd();
+                        return;
+                    }
+
+                    const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                    const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+                    const seconds = Math.floor((distance % (1000 * 60)) / 1000);
+                    
+                    timerElement.textContent = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+                    timerElement.classList.toggle('text-warning', distance < 120000);
+                    timerElement.classList.toggle('animate-pulse', distance < 120000);
+                };
+
+                const timerId = setInterval(update, 1000);
+                update(); // Run immediately
+                return timerId;
+            }
+        };
+
+        const uiUtils = {
+            getRatingColor: (rating) => {
+                if (rating === null) return 'text-slate-500';
+                if (rating > 90) return 'text-green-500';      // Lysegrønt
+                if (rating > 80) return 'text-green-700';      // Mørkegrønt
+                if (rating > 70) return 'text-yellow-500';     // Gult
+                if (rating > 60) return 'text-orange-600';     // Oransj
+                if (rating > 40) return 'text-red-600';         // Rødt
+                if (rating > 30) return 'text-amber-700';       // Lysebrunt
+                return 'text-amber-900';                        // Mørkebrunt
+            },
+            showView: (viewId) => {
+                $$('.view').forEach(v => v.classList.add('hidden'));
+                if ($(`#view-${viewId}`)) {
+                    $(`#view-${viewId}`).classList.remove('hidden');
+                }
+                state.currentView = viewId;
+                uiUtils.setActiveNav(viewId);
+            },
+            setActiveNav: (viewId) => {
+                $$('.nav-link').forEach(a => {
+                    a.classList.remove('active');
+                    if (a.href.endsWith(`#/${viewId}`)) {
+                        a.classList.add('active');
+                    }
+                });
+            },
+            renderError: (container, message) => {
+                container.innerHTML = `<div class="bg-red-50 border border-red-200 text-red-700 p-6 rounded-2xl text-center shadow-md">
+                    <h3 class="font-bold text-lg">Oisann, noe gikk galt!</h3>
+                    <p class="text-sm mt-2">${message}</p>
+                    <button onclick="location.reload()" class="mt-4 bg-red-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-red-700 transition">Prøv igjen</button>
+                </div>`;
+            },
+            renderEmpty: (container, message, suggestion) => {
+                container.innerHTML = `<div class="text-center py-12 bg-card border border-card rounded-2xl">
+                    <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    <h3 class="mt-2 text-lg font-medium text-theme">${message}</h3>
+                    <p class="mt-1 text-sm text-theme-muted">${suggestion}</p>
+                </div>`;
+            }
+        };
+
+        // --- API-HÅNDTERING ---
+
+        async function fetchJson(url, options = {}, retries = 2, backoff = 300) {
+            const { timeout = 10000 } = options;
+            const controller = new AbortController();
+            const id = setTimeout(() => controller.abort(), timeout);
+
+            try {
+                const response = await fetch(url, { ...options, signal: controller.signal });
+                clearTimeout(id);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                // Update global timestamp on successful fetch
+                state.lastUpdated = new Date();
+                $('#last-updated').textContent = state.lastUpdated.toLocaleTimeString('nb-NO');
+                $('#live-indicator').classList.add('live-pulse', 'bg-green-500');
+                $('#live-indicator').classList.remove('bg-gray-500');
+                setTimeout(() => {
+                    $('#live-indicator').classList.remove('live-pulse');
+                }, 10000);
+
+                return await response.json();
+            } catch (error) {
+                clearTimeout(id);
+                if (retries > 0) {
+                    await new Promise(res => setTimeout(res, backoff));
+                    return fetchJson(url, options, retries - 1, backoff * 2);
+                } else {
+                    console.error(`Failed to fetch ${url}:`, error);
+                    $('#live-indicator').classList.remove('bg-green-500', 'live-pulse');
+                    $('#live-indicator').classList.add('bg-red-500');
+                    throw error;
+                }
+            }
+        }
+        
+        // --- TEMA-HÅNDTERING ---
+        
+        function applyTheme(themeName) {
+            document.documentElement.className = ''; // Reset classes on html tag
+            if(THEMES.includes(themeName)) {
+                 document.documentElement.classList.add(`theme-${themeName}`);
+            }
+            state.currentTheme = themeName;
+        }
+        
+        function setupTheme() {
+            const themeOverride = localStorage.getItem('themeOverride');
+            state.themeLockUntil = localStorage.getItem('layoutLockedUntil');
+            
+            if (state.themeLockUntil && new Date(state.themeLockUntil) > new Date()) {
+                $('#theme-button').disabled = true;
+                $('#theme-lock-indicator').classList.remove('hidden');
+            }
+            
+            $('#theme-button').addEventListener('click', () => {
+                const themesWithLight = ['light', ...THEMES];
+                const currentIndex = themesWithLight.indexOf(state.currentTheme);
+                const nextIndex = (currentIndex + 1) % themesWithLight.length;
+                const newTheme = themesWithLight[nextIndex];
+                applyTheme(newTheme);
+                localStorage.setItem('themeOverride', newTheme);
+            });
+            
+            return themeOverride;
+        }
+
+        // --- RENDERING AV VIEWS ---
+
+        function renderSkeleton(container, templateId = 'table-skeleton-template') {
+            const template = $(`#${templateId}`);
+            if (template) {
+                container.innerHTML = '';
+                container.appendChild(template.content.cloneNode(true));
+            }
+        }
+
+        async function renderClanView(isInitialLoad = true) {
+            const container = $('#view-clan');
+            if (isInitialLoad) {
+                renderSkeleton(container);
+            }
+            
+            try {
+                const [logData, membersData, themeData] = await Promise.all([
+                    fetchJson(API_URLS.LOG_CW),
+                    fetchJson(API_URLS.CLAN_MEMBERS),
+                    fetchJson(API_URLS.THEME) // Fetch fresh theme data
+                ]);
+                
+                state.warInfo = themeData.warInfo; // Update global war state
+
+                let vsSection = `<p class="text-3xl font-bold text-theme-muted">VS</p>`;
+                if (state.warInfo && state.warInfo.state === 'inWar') {
+                    vsSection = `
+                        <div class="flex items-center justify-center gap-3">
+                            <div class="relative flex h-3 w-3">
+                                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
+                                <span class="relative inline-flex rounded-full h-3 w-3 bg-success"></span>
+                            </div>
+                            <p class="text-4xl font-bold text-theme-muted">VS</p>
+                        </div>`;
+                }
+
+
+                // Siste krig
+                const lastWarHtml = `
+                    <div class="bg-card border border-card rounded-2xl p-6 shadow-theme">
+                        <h2 class="text-2xl font-bold text-theme mb-4">Siste Krig</h2>
+                        <div class="flex items-center justify-between">
+                            <div class="text-center">
+                                <img src="${state.clanBadgeUrl}" alt="Uguwewe Badge" class="h-20 w-20 mx-auto rounded-xl mb-2">
+                                <p class="font-semibold text-theme">Uguwewe</p>
+                                <p class="text-2xl font-bold ${logData.score.winner === 'uguwewe' ? 'text-success' : 'text-theme'}">${logData.score.uguwewewewughoa_stars} ★</p>
+                            </div>
+                            <div class="text-center">
+                                ${vsSection}
+                                <p class="text-sm text-theme-muted">Endte: ${timeUtils.formatOslo(logData.opponent.endTime)}</p>
+                                <p class="mt-2 text-sm font-semibold">Vinner: <span class="text-accent">${logData.score.winner}</span></p>
+                            </div>
+                            <div class="text-center">
+                                <img src="${logData.opponent.badge_url}" alt="${logData.opponent.name} Badge" class="h-20 w-20 mx-auto rounded-xl mb-2">
+                                <p class="font-semibold text-theme">${logData.opponent.name}</p>
+                                <p class="text-2xl font-bold ${logData.score.winner !== 'uguwewe' ? 'text-success' : 'text-theme'}">${logData.score.opp_stars} ★</p>
+                            </div>
+                        </div>
+                    </div>`;
+
+                // Topp 10 spillere
+                const top10Players = Object.entries(membersData)
+                    .map(([tag, data]) => ({ tag, ...data }))
+                    .sort((a, b) => b.rating - a.rating)
+                    .slice(0, 10);
+                
+                const top10Table = `
+                    <div class="bg-card border border-card rounded-2xl shadow-theme overflow-hidden">
+                        <div class="p-6">
+                           <h2 class="text-2xl font-bold text-theme">Topp 10 Klanmedlemmer (Rating)</h2>
+                        </div>
+                        <div class="table-container">
+                            <table class="min-w-full">
+                                <thead class="bg-theme-muted/50 table-sticky-header">
+                                    <tr>
+                                        <th class="px-6 py-3 text-left text-xs font-semibold text-theme-muted uppercase tracking-wider">Navn</th>
+                                        <th class="px-6 py-3 text-left text-xs font-semibold text-theme-muted uppercase tracking-wider">Rating</th>
+                                        <th class="px-6 py-3 text-left text-xs font-semibold text-theme-muted uppercase tracking-wider">CW Stjerner</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="bg-card">
+                                    ${top10Players.map(p => `
+                                        <tr class="border-t border-card">
+                                            <td class="px-6 py-4 whitespace-nowrap font-medium"><a href="#/player/${p.tag.substring(1)}" class="hover:underline text-accent font-semibold">${p.name}</a></td>
+                                            <td class="px-6 py-4 whitespace-nowrap font-bold ${uiUtils.getRatingColor(p.rating)}">${p.rating}</td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-theme">${p.sum_stars} ★</td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>`;
+                
+                // Widget
+                const allMembers = Object.values(membersData);
+                const totalMembers = allMembers.length;
+                const avgRating = totalMembers > 0 ? (allMembers.reduce((acc, p) => acc + p.rating, 0) / totalMembers).toFixed(1) : 0;
+                const thLevels = allMembers.reduce((acc, p) => {
+                    acc[p.townhall] = (acc[p.townhall] || 0) + 1;
+                    return acc;
+                }, {});
+                const mostCommonTH = totalMembers > 0 ? Object.keys(thLevels).reduce((a, b) => thLevels[a] > thLevels[b] ? a : b) : 'N/A';
+
+                const widgetHtml = `
+                    <div class="bg-card border border-card rounded-2xl p-6 shadow-theme">
+                        <h2 class="text-xl font-bold text-theme mb-4">Klanstatistikk</h2>
+                        <div class="space-y-4 text-sm">
+                            <div class="flex justify-between items-center">
+                                <span class="text-theme-muted">Totalt antall medlemmer:</span>
+                                <span class="font-bold text-theme">${totalMembers}</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-theme-muted">Gjennomsnittlig rating:</span>
+                                <span class="font-bold text-theme">${avgRating}</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-theme-muted">Vanligste Town Hall:</span>
+                                <span class="font-bold text-theme">TH ${mostCommonTH}</span>
+                            </div>
+                        </div>
+                    </div>`;
+
+
+                container.innerHTML = `
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                        <div class="lg:col-span-2 space-y-8">
+                            ${lastWarHtml}
+                            ${top10Table}
+                        </div>
+                        <div class="space-y-8">
+                           ${widgetHtml}
+                        </div>
+                    </div>`;
+
+            } catch (error) {
+                uiUtils.renderError(container, 'Kunne ikke laste klandata. Sjekk konsollen for detaljer.');
+            }
+        }
+        
+        function startLiveWarPolling(data) {
+            clearTimeout(state.timers.liveWar);
+            
+            const warState = data.war_info.state;
+            let interval = 0;
+            
+            if (warState === 'inWar') {
+                interval = 2000 + Math.random() * 3000; // 2-5s
+                $('#live-indicator-container').classList.add('in-war');
+            } else {
+                $('#live-indicator-container').classList.remove('in-war');
+                if (warState === 'preparation') {
+                    interval = 60000 + Math.random() * 60000; // 60-120s
+                }
+            }
+            
+            if (interval > 0) {
+                 state.timers.liveWar = setTimeout(() => renderLiveView(false), interval);
+            } else {
+                console.log("War ended. Stopping polling for Live War.");
+            }
+        }
+        
+        async function renderLiveView(isInitialLoad = true) {
+            const container = $('#view-live');
+             if (isInitialLoad) {
+                renderSkeleton(container);
+            }
+
+            try {
+                const data = await fetchJson(API_URLS.LIVE_CW);
+                state.liveWarData = data; // Cache data for modal
+                const { war_info } = data;
+
+                if (!war_info) {
+                    throw new Error("Mangler 'war_info' i responsen fra LIVE_CW.");
+                }
+
+                if(isInitialLoad) {
+                    let midSectionHtml = '';
+                    if(war_info.state === 'preparation') {
+                        midSectionHtml = `<div class="text-center">
+                            <p class="text-sm uppercase tracking-wider text-theme-muted">Starter Om</p>
+                            <span id="countdown-timer" class="text-2xl font-bold tabular-nums"></span>
+                        </div>`;
+                    } else if (war_info.state === 'inWar') {
+                        midSectionHtml = `<div class="text-center">
+                            <div class="flex items-center justify-center gap-3">
+                                <div class="relative flex h-3 w-3">
+                                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
+                                    <span class="relative inline-flex rounded-full h-3 w-3 bg-success"></span>
+                                </div>
+                                <p class="text-4xl font-bold text-theme-muted">VS</p>
+                            </div>
+                            <p class="text-sm uppercase tracking-wider text-theme-muted mt-1">Slutter Om</p>
+                            <span id="countdown-timer" class="text-2xl font-bold tabular-nums"></span>
+                        </div>`;
+                    } else {
+                        midSectionHtml = `<p class="text-xl font-bold text-accent">Krigen er ferdig</p>`;
+                    }
+                    
+                    const warHeaderHtml = `
+                    <div class="bg-card border border-card rounded-2xl p-6 shadow-theme mb-8">
+                        <div class="flex items-center justify-around">
+                             <div class="text-center">
+                                <img src="${state.clanBadgeUrl}" alt="Uguwewe Badge" class="h-20 w-20 mx-auto rounded-xl mb-2">
+                                <p class="text-xl font-semibold text-theme">Uguwewe</p>
+                            </div>
+                            ${midSectionHtml}
+                            <div class="text-center">
+                                <img src="${war_info.oppBadge}" alt="${war_info.oppName} Badge" class="h-20 w-20 mx-auto rounded-xl mb-2">
+                                <p class="text-xl font-semibold text-theme">${war_info.oppName}</p>
+                            </div>
+                        </div>
+                    </div>`;
+
+                    const players = Object.entries(data).filter(([key]) => key.startsWith('#')).map(([tag, playerData]) => ({ tag, ...playerData }));
+                    const playersHtml = players.map(p => `
+                        <div class="player-card bg-card border border-card rounded-2xl p-4 text-center space-y-2 flex flex-col justify-between shadow-theme hover:shadow-lg transition-shadow duration-300" data-tag="${p.tag}">
+                            <a href="#/player/${p.tag.substring(1)}" class="player-name-link font-bold text-lg text-accent hover:underline truncate">${p.name}</a>
+                            <p class="text-sm text-theme-muted pointer-events-none">TH ${p.townhallLevel}</p>
+                            <div class="grid grid-cols-2 gap-2 text-sm pt-2 pointer-events-none">
+                                <div><p class="font-semibold text-theme player-attacks">${p.attacksUsed} / 2</p><p class="text-xs text-theme-muted">Angrep</p></div>
+                                <div><p class="font-semibold text-theme player-stars">${p.totalStars} ★</p><p class="text-xs text-theme-muted">Stjerner</p></div>
+                            </div>
+                            <div class="pt-2 pointer-events-none"><p class="font-bold text-lg text-theme player-score"></p><p class="text-xs text-theme-muted">Poeng</p></div>
+                        </div>`).join('');
+                    
+                    container.innerHTML = warHeaderHtml + `<div id="live-players-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">${playersHtml}</div>`;
+                }
+
+                // Granular update for players
+                const players = Object.entries(data).filter(([key]) => key.startsWith('#')).map(([tag, playerData]) => ({ tag, ...playerData }));
+                players.forEach(p => {
+                    const card = container.querySelector(`[data-tag="${p.tag}"]`);
+                    if(card) {
+                        card.querySelector('.player-attacks').textContent = `${p.attacksUsed} / 2`;
+                        card.querySelector('.player-stars').textContent = `${p.totalStars} ★`;
+                        const scoreBonus = war_info.warType === 'cw' && p.score.potentialBonus ? `<span class="text-xs text-green-400"> (+${p.score.potentialBonus})</span>` : '';
+                        card.querySelector('.player-score').innerHTML = (p.score ? p.score.points : 'N/A') + scoreBonus;
+                    }
+                });
+
+
+                // Set up countdown AFTER elements are in the DOM
+                clearInterval(state.timers.countdown);
+                const timerElement = container.querySelector('#countdown-timer');
+                if (timerElement) {
+                    const targetTime = war_info.state === 'preparation' ? war_info.startTime : war_info.endTime;
+                    state.timers.countdown = timeUtils.countdown(targetTime, timerElement, () => renderLiveView(false));
+                }
+                
+                startLiveWarPolling(data);
+
+            } catch (error) {
+                 uiUtils.renderEmpty(container, 'Ingen aktiv krig funnet.', 'Sjekk tilbake senere eller se på Klansiden for siste resultater.');
+                 clearTimeout(state.timers.liveWar);
+                 $('#live-indicator-container').classList.remove('in-war');
+            }
+        }
+        
+        async function renderToplistsView(isInitialLoad = true) {
+            const container = $('#view-toplists');
+            if (isInitialLoad) {
+                renderSkeleton(container);
+            }
+            
+            try {
+                const data = await fetchJson(API_URLS.LIVE_MONTHLY);
+                const players = Object.entries(data).map(([tag, d]) => ({ tag, ...d })).sort((a,b) => a.rank - b.rank);
+
+                container.innerHTML = `
+                <div class="bg-card border border-card rounded-2xl shadow-theme overflow-hidden">
+                    <div class="p-6">
+                       <h2 class="text-2xl font-bold text-theme">Live Månedlig Rangering</h2>
+                       <p class="text-sm text-theme-muted mt-1">Oppdateres etter kriger, ikke under.</p>
+                    </div>
+                    <div class="table-container">
+                        <table class="min-w-full">
+                            <thead class="bg-theme-muted/50 table-sticky-header">
+                                <tr>
+                                    ${['#', 'Navn', 'Poeng', 'Bonus', 'Prosent', 'Endelig Poeng', 'Maks Poeng'].map(h => `<th class="px-4 py-3 text-left text-xs font-semibold text-theme-muted uppercase tracking-wider">${h}</th>`).join('')}
+                                </tr>
+                            </thead>
+                            <tbody class="bg-card">
+                                ${players.map(p => `
+                                    <tr class="border-t border-card">
+                                        <td class="px-4 py-4 whitespace-nowrap font-bold text-theme">${p.rank}</td>
+                                        <td class="px-4 py-4 whitespace-nowrap font-medium text-accent"><a href="#/player/${p.tag.substring(1)}" class="hover:underline font-semibold">${p.name}</a></td>
+                                        <td class="px-4 py-4 whitespace-nowrap text-theme">${p.monthly_points}</td>
+                                        <td class="px-4 py-4 whitespace-nowrap text-green-500">+${p.monthly_possible_bonus}</td>
+                                        <td class="px-4 py-4 whitespace-nowrap text-theme">${p.precent}</td>
+                                        <td class="px-4 py-4 whitespace-nowrap font-bold text-success">${p.final_monthly_points}</td>
+                                        <td class="px-4 py-4 whitespace-nowrap text-theme-muted">${p.monthly_max_points}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                `;
+            } catch (error) {
+                uiUtils.renderError(container, 'Kunne ikke laste topplister.');
+            }
+        }
+
+        async function renderMembersView(isInitialLoad = true) {
+            const container = $('#view-members');
+            if (isInitialLoad) {
+                renderSkeleton(container);
+            }
+
+            try {
+                const data = await fetchJson(API_URLS.CLAN_MEMBERS);
+                const members = Object.entries(data).map(([tag, d]) => ({ tag, ...d })).sort((a,b) => b.trophies - a.trophies);
+                
+                container.innerHTML = `
+                <div class="bg-card border border-card rounded-2xl shadow-theme overflow-hidden">
+                     <div class="p-6 flex justify-between items-center">
+                       <h2 class="text-2xl font-bold text-theme">Klanmedlemmer</h2>
+                     </div>
+                     <div class="table-container">
+                        <table class="min-w-full">
+                            <thead class="bg-theme-muted/50 table-sticky-header">
+                                <tr>
+                                    ${['Liga', 'Navn', 'Rolle', 'Town Hall', 'CW Stjerner', 'Rating', 'Trofeer'].map(h => `<th class="px-6 py-3 text-left text-xs font-semibold text-theme-muted uppercase tracking-wider">${h}</th>`).join('')}
+                                </tr>
+                            </thead>
+                            <tbody class="bg-card">
+                                ${members.map(p => `
+                                    <tr class="border-t border-card">
+                                        <td class="px-6 py-4 whitespace-nowrap"><img src="${p.icon_url}" class="h-8 w-8 rounded-md"></td>
+                                        <td class="px-6 py-4 whitespace-nowrap font-semibold text-accent"><a href="#/player/${p.tag.substring(1)}" class="hover:underline">${p.name}</a></td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm capitalize text-theme-muted">${p.role}</td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-theme">TH ${p.townhall}</td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-theme">${p.sum_stars} ★</td>
+                                        <td class="px-6 py-4 whitespace-nowrap font-bold ${uiUtils.getRatingColor(p.rating)}">${p.rating}</td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-theme">${p.trophies} 🏆</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                     </div>
+                </div>
+                `;
+            } catch (error) {
+                uiUtils.renderError(container, 'Kunne ikke laste medlemsliste.');
+            }
+        }
+
+        async function renderAwardsView(isInitialLoad = true) {
+            const container = $('#view-awards');
+            if (isInitialLoad) {
+                renderSkeleton(container);
+            }
+
+            try {
+                const [mvp, rompis, top10] = await Promise.all([
+                    fetchJson(API_URLS.MVP),
+                    fetchJson(API_URLS.ROMPIS),
+                    fetchJson(API_URLS.TOP10)
+                ]);
+
+                const mvpCard = $('#generic-card-template').content.cloneNode(true).firstElementChild;
+                mvpCard.querySelector('h2').textContent = mvp.name || 'N/A';
+                mvpCard.querySelector('h3').textContent = mvp.headline || '';
+                mvpCard.querySelector('p:nth-of-type(1)').textContent = mvp.comment || '';
+                mvpCard.querySelector('p:nth-of-type(2)').textContent = mvp.info || '';
+                
+                const rompisCard = $('#generic-card-template').content.cloneNode(true).firstElementChild;
+                rompisCard.querySelector('h2').textContent = rompis.name || 'N/A';
+                rompisCard.querySelector('h3').textContent = rompis.headline || '';
+                rompisCard.querySelector('p:nth-of-type(1)').textContent = rompis.comment || '';
+                rompisCard.querySelector('p:nth-of-type(2)').textContent = rompis.info || '';
+                
+                const top10Players = Object.entries(top10).map(([tag, d]) => ({tag, ...d})).sort((a,b) => a.rank - b.rank);
+                const top10Table = `
+                <div class="bg-card border border-card rounded-2xl shadow-theme overflow-hidden h-full flex flex-col">
+                     <div class="p-6">
+                       <h2 class="text-2xl font-bold text-theme">Månedens Topp 10</h2>
+                     </div>
+                     <div class="table-container flex-grow">
+                        <table class="min-w-full">
+                            <thead class="bg-theme-muted/50 table-sticky-header">
+                                <tr>
+                                     ${['#', 'Navn', 'Poeng', 'Stjerner', 'Kommentar'].map(h => `<th class="px-6 py-3 text-left text-xs font-semibold text-theme-muted uppercase tracking-wider">${h}</th>`).join('')}
+                                </tr>
+                            </thead>
+                            <tbody class="bg-card">
+                                 ${top10Players.map(p => `
+                                    <tr class="border-t border-card">
+                                        <td class="px-6 py-4 whitespace-nowrap font-bold text-theme">${p.rank}</td>
+                                        <td class="px-6 py-4 whitespace-nowrap font-semibold text-accent"><a href="#/player/${p.tag.substring(1)}" class="hover:underline">${p.name}</a></td>
+                                        <td class="px-6 py-4 whitespace-nowrap font-bold text-success">${p.points}</td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-theme">${p.stars} ★</td>
+                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-theme-muted">${p.comment || ''}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                     </div>
+                </div>`;
+                
+                container.innerHTML = `
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                        <div class="lg:col-span-1 space-y-8">
+                           ${mvpCard.outerHTML}
+                           ${rompisCard.outerHTML}
+                        </div>
+                        <div class="lg:col-span-2">
+                           ${top10Table}
+                        </div>
+                    </div>`;
+
+            } catch (error) {
+                uiUtils.renderError(container, 'Kunne ikke laste kåringer.');
+            }
+        }
+        
+        async function renderPlayerView(tag) {
+            const container = $('#view-player');
+            renderSkeleton(container, 'player-profile-skeleton-template');
+            
+            const cleanTag = tag.startsWith('#') ? tag.substring(1) : tag;
+            const requestUrl = API_URLS.PLAYER_BASE + cleanTag;
+
+            try {
+                const responseData = await fetchJson(requestUrl);
+                
+                const playerTagInResponse = Object.keys(responseData)[0];
+                if (!playerTagInResponse) {
+                    throw new Error("Invalid player response format.");
+                }
+
+                const data = responseData[playerTagInResponse];
+                const displayName = data.name || playerTagInResponse;
+
+                container.innerHTML = `
+                <div class="max-w-4xl mx-auto space-y-6">
+                    <div class="bg-card border border-card rounded-2xl p-6 text-center shadow-theme">
+                        <h2 class="text-4xl font-bold text-theme">${displayName}</h2>
+                        <p class="text-lg text-theme-muted">
+                            Town Hall ${data.townhall || 'N/A'} | 
+                            <span class="${uiUtils.getRatingColor(data.player_rating)} font-bold">
+                                Rating: ${data.player_rating || 'N/A'}
+                            </span>
+                        </p>
+                        ${data.name === null ? `<p class="mt-2 text-sm text-warning">Spiller ikke funnet i klanen.</p>` : ''}
+                    </div>
+
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div class="bg-card border border-card rounded-xl p-4 text-center">
+                            <p class="text-2xl font-semibold text-theme">${parseFloat(data.avrg_stars).toFixed(2)} ★</p>
+                            <p class="text-sm text-theme-muted">Snitt Stjerner</p>
+                        </div>
+                         <div class="bg-card border border-card rounded-xl p-4 text-center">
+                            <p class="text-2xl font-semibold text-theme">${parseFloat(data.avrg_attacks_used).toFixed(2)}</p>
+                            <p class="text-sm text-theme-muted">Snitt Angrep Brukt</p>
+                        </div>
+                        <div class="bg-card border border-card rounded-xl p-4 text-center">
+                            <p class="text-2xl font-semibold text-theme">${data.sum_attacks_used}</p>
+                            <p class="text-sm text-theme-muted">Totalt Angrep Brukt</p>
+                        </div>
+                        <div class="bg-card border border-card rounded-xl p-4 text-center">
+                            <p class="text-2xl font-semibold text-theme">${data.wars_attended}</p>
+                            <p class="text-sm text-theme-muted">Kriger Deltatt</p>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="bg-card border border-card rounded-2xl p-6 text-center">
+                             <p class="text-4xl font-bold text-success">${data.sum_points}</p>
+                            <p class="text-md text-theme-muted">Totalt Poeng</p>
+                        </div>
+                        <div class="bg-card border border-card rounded-2xl p-6 text-center">
+                             <p class="text-4xl font-bold text-amber-400">${data.sum_stars} ★</p>
+                            <p class="text-md text-theme-muted">Totalt Stjerner</p>
+                        </div>
+                    </div>
+                </div>
+                `;
+
+            } catch (error) {
+                console.error("Error rendering player view:", error);
+                uiUtils.renderError(container, `Kunne ikke finne spiller med tag #${cleanTag}.`);
+            }
+        }
+        
+        // --- ROUTER & INITIALISERING ---
+        
+        function handleRouteChange() {
+            clearAllTimers();
+            const hash = window.location.hash || '#/';
+            const [path, param] = hash.substring(2).split('/');
+            
+            if (path === 'player' && param) {
+                uiUtils.showView('player');
+                renderPlayerView(param); // No polling for individual player profiles
+            } else {
+                const viewId = NAV_ITEMS.find(item => item.id === path) ? path : 'clan';
+                uiUtils.showView(viewId);
+                
+                const poll = (renderFunc, interval, isInitialLoad = true) => {
+                    renderFunc(isInitialLoad);
+                    state.timers.viewPoller = setTimeout(() => poll(renderFunc, interval, false), interval);
+                };
+
+                switch(viewId) {
+                    case 'clan':
+                        poll(renderClanView, 300000 + Math.random() * 300000); // 5-10 min
+                        break;
+                    case 'live':
+                        renderLiveView(); // Manages its own more complex polling
+                        break;
+                    case 'toplists':
+                        poll(renderToplistsView, 120000 + Math.random() * 120000); // 2-4 min
+                        break;
+                    case 'members':
+                        poll(renderMembersView, 300000 + Math.random() * 300000); // 5-10 min
+                        break;
+                    case 'awards':
+                        poll(renderAwardsView, 300000 + Math.random() * 300000); // 5-10 min
+                        break;
+                }
+            }
+        }
+
+        function clearAllTimers() {
+            Object.values(state.timers).forEach(timerId => {
+                clearInterval(timerId);
+                clearTimeout(timerId);
+            });
+            state.timers = {};
+            $('#live-indicator-container').classList.remove('in-war');
+        }
+
+        function populateNav() {
+            const navHtml = NAV_ITEMS.map(item => `
+                <a href="#/${item.id}" class="nav-link flex items-center px-4 py-2.5 text-sm font-medium rounded-lg text-theme-muted transition-colors">
+                    ${item.icon}
+                    <span>${item.name}</span>
+                </a>
+            `).join('');
+            $('#desktop-nav').innerHTML = navHtml;
+            $('#mobile-nav').innerHTML = navHtml;
+        }
+        
+        function setupSearch() {
+            const searchInput = $('#search-input');
+            const suggestionsContainer = $('#search-suggestions');
+
+            searchInput.addEventListener('input', () => {
+                const query = searchInput.value.toLowerCase();
+                if (query.length < 2) {
+                    suggestionsContainer.classList.add('hidden');
+                    return;
+                }
+                
+                const filteredMembers = state.clanMembers.filter(m => m.name.toLowerCase().includes(query));
+                
+                if (filteredMembers.length > 0) {
+                    suggestionsContainer.innerHTML = filteredMembers.slice(0, 5).map(m => 
+                        `<a href="#/player/${m.tag.substring(1)}" class="block px-4 py-2 text-sm text-theme hover:bg-gray-100 dark:hover:bg-gray-700">${m.name}</a>`
+                    ).join('');
+                    suggestionsContainer.classList.remove('hidden');
+                } else {
+                    suggestionsContainer.classList.add('hidden');
+                }
+            });
+
+            // Hide suggestions when clicking outside
+            document.addEventListener('click', (e) => {
+                if (!searchInput.contains(e.target)) {
+                    suggestionsContainer.classList.add('hidden');
+                }
+            });
+
+             suggestionsContainer.addEventListener('click', () => {
+                suggestionsContainer.classList.add('hidden');
+                searchInput.value = '';
+            });
+        }
+
+        async function pollTheme() {
+            console.log('Polling for theme update...');
+            try {
+                const themeData = await fetchJson(API_URLS.THEME);
+                state.warInfo = themeData.warInfo; // Update global war state
+
+                // Only check if theme is not locked
+                if (!state.themeLockUntil || new Date(state.themeLockUntil) < new Date()) {
+                    if (state.themeLockUntil) { // Cleanup expired lock
+                        localStorage.removeItem('layoutLockedUntil');
+                        state.themeLockUntil = null;
+                        $('#theme-button').disabled = false;
+                        $('#theme-lock-indicator').classList.add('hidden');
+                    }
+                    
+                    const themeOverride = localStorage.getItem('themeOverride');
+                    if (!themeOverride) { // Only update theme if user hasn't overridden it
+                        applyTheme(themeData.theme);
+                    }
+                }
+            } catch (error) {
+                console.error("Failed to poll for theme:", error);
+            } finally {
+                state.timers.themePoller = setTimeout(pollTheme, 15 * 60 * 1000); // Poll every 15 minutes
+            }
+        }
+
+
+        async function init() {
+            populateNav();
+            setupTheme();
+
+            try {
+                // Fetch members for search autocomplete early
+                const membersData = await fetchJson(API_URLS.CLAN_MEMBERS);
+                state.clanMembers = Object.entries(membersData).map(([tag, data]) => ({tag, ...data}));
+                setupSearch();
+                
+                // Fetch Live CW data early to get clan badge, if available
+                try {
+                    const liveCwData = await fetchJson(API_URLS.LIVE_CW);
+                    if (liveCwData.war_info && liveCwData.war_info.clanBadge) {
+                        state.clanBadgeUrl = liveCwData.war_info.clanBadge;
+                        $('#sidebar-logo').src = state.clanBadgeUrl;
+                    }
+                } catch (e) {
+                    console.warn("Could not fetch Live CW data on init, using fallback logo.", e);
+                }
+
+                const themeData = await fetchJson(API_URLS.THEME);
+                state.warInfo = themeData.warInfo; // Store war info globally
+                let startRoute = 'clan';
+                
+                if (themeData.warInfo && themeData.warInfo.endTime) {
+                    const standardEndTime = timeUtils.parseNonStandardISO(themeData.warInfo.endTime);
+                    if (standardEndTime && new Date(standardEndTime) > new Date()) {
+                        const lockTime = new Date(standardEndTime).toISOString();
+                        if (lockTime !== localStorage.getItem('layoutLockedUntil')) {
+                            localStorage.setItem('layoutLockedUntil', lockTime);
+                            localStorage.removeItem('themeOverride');
+                            window.location.reload();
+                        }
+                    }
+                } else {
+                    localStorage.removeItem('layoutLockedUntil');
+                }
+                
+                // Determine theme: Override > Locked Theme > API Theme > Default Light
+                const themeOverride = localStorage.getItem('themeOverride');
+                 if (themeOverride) {
+                    applyTheme(themeOverride);
+                } else if (state.themeLockUntil) {
+                    applyTheme(themeData.theme || 'nowar');
+                } else {
+                    applyTheme('light');
+                }
+                
+                // Determine start page based on API, only if no hash is present
+                 if (!window.location.hash || window.location.hash === '#/') {
+                    switch(themeData.theme) {
+                        case 'clanwarleague':
+                        case 'clanwar':
+                            startRoute = 'live';
+                            break;
+                        case 'top10':
+                            startRoute = 'awards';
+                            break;
+                        case 'noWar':
+                        default:
+                            startRoute = 'clan';
+                            break;
+                    }
+                    window.location.hash = `#/${startRoute}`;
+                }
+
+
+                $('#initial-loader').classList.add('hidden');
+                handleRouteChange();
+                pollTheme(); // Start the background theme polling
+
+                // Set up event listeners
+                window.addEventListener('hashchange', handleRouteChange);
+
+                // Mobile menu
+                const mobileMenu = $('#mobile-menu');
+                const overlay = $('#mobile-menu-overlay');
+                $('#hamburger-btn').addEventListener('click', () => {
+                    mobileMenu.classList.remove('mobile-menu-closed');
+                    mobileMenu.classList.add('mobile-menu-open');
+                    overlay.classList.remove('hidden');
+                });
+                const closeMenu = () => {
+                    mobileMenu.classList.remove('mobile-menu-open');
+                    mobileMenu.classList.add('mobile-menu-closed');
+                    overlay.classList.add('hidden');
+                };
+                overlay.addEventListener('click', closeMenu);
+                $('#mobile-nav').addEventListener('click', (e) => {
+                    if (e.target.tagName === 'A' || e.target.closest('A')) {
+                       closeMenu();
+                    }
+                });
+
+                 // Modal listeners
+                const modalContainer = $('#modal-container');
+                $('#modal-close-btn').addEventListener('click', () => modalContainer.classList.add('hidden'));
+                modalContainer.addEventListener('click', (e) => {
+                    if (e.target === modalContainer) {
+                        modalContainer.classList.add('hidden');
+                    }
+                });
+                
+                 // Live war card click listener using event delegation
+                $('#view-live').addEventListener('click', (e) => {
+                    if (e.target.classList.contains('player-name-link')) {
+                        return; // Don't open modal if name is clicked
+                    }
+                    const card = e.target.closest('.player-card');
+                    if(card) {
+                        const tag = card.dataset.tag;
+                        const playerData = state.liveWarData[tag];
+                        if (playerData) {
+                             const modalTitle = $('#modal-title');
+                            const modalContent = $('#modal-content');
+                            modalTitle.textContent = `Angrepsdetaljer for ${playerData.name}`;
+
+                            if(playerData.attacks && playerData.attacks.length > 0) {
+                                modalContent.innerHTML = playerData.attacks.map((attack, index) => `
+                                <div class="p-3 bg-theme-muted rounded-lg">
+                                    <h3 class="font-bold text-lg text-accent">Angrep ${index + 1}</h3>
+                                    <div class="mt-2 text-sm space-y-1">
+                                        <p><strong class="text-theme-muted">Motstander:</strong> ${attack.defenderName} (TH${attack.defenderTownhall})</p>
+                                        <p><strong class="text-theme-muted">Stjerner:</strong> ${'★'.repeat(attack.stars).padEnd(3, '☆')}</p>
+                                        <p><strong class="text-theme-muted">Ødeleggelse:</strong> ${attack.destructionPercentage}%</p>
+                                        <p><strong class="text-theme-muted">Varighet:</strong> ${attack.duration} sek</p>
+                                    </div>
+                                </div>
+                                `).join('');
+                            } else {
+                                modalContent.innerHTML = `<p class="text-theme-muted">Ingen angrep registrert ennå.</p>`;
+                            }
+
+                            modalContainer.classList.remove('hidden');
+                        }
+                    }
+                });
+
+
+            } catch (error) {
+                $('#initial-loader').classList.add('hidden');
+                uiUtils.renderError($('#main-content'), 'Kunne ikke laste inn innledende konfigurasjon. Siden kan ikke vises.');
+            }
+        }
+
+        // Start applikasjonen
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
+
